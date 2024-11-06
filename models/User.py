@@ -1,4 +1,4 @@
-from sqlalchemy import TIMESTAMP, Column, Integer, SmallInteger, String, text, func
+from sqlalchemy import TIMESTAMP, Column, Integer, SmallInteger, String, text, func, DateTime
 from database import Base
 
 class User(Base):
@@ -14,6 +14,8 @@ class User(Base):
         onupdate=func.now(),
         server_onupdate=func.now()
     )
+    reset_token = Column(String(50), nullable=True)
+    reset_token_expiry = Column(DateTime, nullable=True)
     deleted_at = Column(TIMESTAMP, nullable=True, default=None)
 
     def serialize(self):

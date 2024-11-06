@@ -3,18 +3,22 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from typing import Annotated
 from schemas.UserSchema import (
     createUserSchema,
-    loginFormSchema 
+    loginFormSchema,
+    forgotFormSchema,
+    AcceptTokenPasswordRequest,
+    ResetPasswordRequest
 )
 from models.User import User
 from utils import Auth
 from utils.Hash import Hash  
-from validators.userValidator import check_existing_user
+from validators.userValidator import check_existing_user, check_exiting_email_for_reset_password
 from database import db
 from passlib.exc import UnknownHashError
 
 from os import environ
 from middlewares import get_current_user
 from dotenv import load_dotenv
+from datetime import datetime
 
 load_dotenv()
 router = APIRouter()
@@ -88,6 +92,101 @@ def login(form_data: loginFormSchema):
         )
     finally:
         db.close()
+
+# @router.post('/users/auth/forgot_password')
+# def forgot_password(
+#     form_data: forgotFormSchema,
+# ):
+#     try:
+#         check_exiting_email_for_reset_password(form_data.email)
+#         reset_token = Auth.generate_reset_token()
+#         Auth.send_reset_password(form_data.email, reset_token)
+#         return {"message": "Password reset link has been sent to your email."}
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=str(e) ,
+#         )
+
+@router.post('/users/auth/forgot_password')
+def forgot_password(
+    form_data: forgotFormSchema
+):
+    try:
+
+        user = check_exiting_email_for_reset_password(form_data.email)
+
+        reset_token = Auth.generate_reset_token()
+
+        Auth.save_reset_token(user, reset_token)
+
+        reset_link = f"http://localhost:8181/user/auth/reset_password"
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "message": "Password reset link has been sent to your email.",
+                "reset_link": reset_link,
+                "reset_token": reset_token  
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+@router.post('/users/auth/reset_password')
+def reset_password_with_reset_token(
+    form_data: ResetPasswordRequest
+):
+    try:
+        user = db.query(User).filter(User.reset_token == form_data.reset_token).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset token"
+            )
+        if user.reset_token_expiry < datetime.utcnow():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reset token has expired"
+            )
+        password = Hash.make(form_data.new_password)
+        user.password = password
+        user.reset_token = None
+        user.reset_token_expỉry = None
+        db.commit()
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content="password had success change"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.post('/users/auth/reset_token_with_accept_token')
+def reset_password_with_accept_token(
+    form_data = AcceptTokenPasswordRequest,
+    user=Depends(get_current_user)
+):
+    try:
+        password = Hash.make(form_data.new_password)
+        user.password = password
+        db.commit()
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content="password had success change"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
 @router.post('/users/auth/refreshtoken')
 def refresh_token(request: Request):
     token_exception = JSONResponse(
@@ -168,3 +267,4 @@ def logout(request: Request):
     )
     response.delete_cookie('refresh_token')
     return response
+

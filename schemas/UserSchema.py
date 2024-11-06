@@ -25,3 +25,14 @@ class loginFormSchema(BaseModel):
         if len(value) < 6:
             raise ValueError('Password must longer')
         return value
+    
+class forgotFormSchema(BaseModel):
+    email:EmailStr
+
+class AcceptTokenPasswordRequest(BaseModel):
+    accept_token: str
+    new_password: str
+
+class ResetPasswordRequest(BaseModel):
+    reset_token: str
+    new_password: str
