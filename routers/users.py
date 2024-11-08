@@ -5,8 +5,8 @@ from schemas.UserSchema import (
     createUserSchema,
     loginFormSchema,
     forgotFormSchema,
-    AcceptTokenPasswordRequest,
-    ResetPasswordRequest
+    ResetPasswordRequest,
+    ResetPasswordWithAcceptToken
 )
 from models.User import User
 from utils import Auth
@@ -16,7 +16,7 @@ from database import db
 from passlib.exc import UnknownHashError
 
 from os import environ
-from middlewares import get_current_user
+from middlewares import get_current_user,get_current_user_for_reset_password
 from dotenv import load_dotenv
 from datetime import datetime
 
@@ -155,12 +155,31 @@ def reset_password_with_reset_token(
         password = Hash.make(form_data.new_password)
         user.password = password
         user.reset_token = None
-        user.reset_token_expỉry = None
+        user.reset_token_expiry = None
+        access_token = Auth.create_access_token(data={'sub': user.email})
+        refresh_token = Auth.create_refresh_token(data={'sub': user.email})
         db.commit()
-        return JSONResponse(
+        response = JSONResponse(
             status_code=status.HTTP_200_OK,
-            content="password had success change"
+            content={
+                'detail': 'password had success change',
+                'data': {
+                    'access_token': access_token
+                }
+            },
+            headers={'WWW-Authenticate': 'Bearer'},
         )
+        response.set_cookie(
+            key='refresh_token',
+            value=refresh_token,
+            max_age=environ.get('REFRESH_TOKEN_EXPIRE_MINUTES'),
+            expires=environ.get('REFRESH_TOKEN_EXPIRE_MINUTES'),
+            path='/',
+            secure=False,
+            httponly=True,
+            samesite="strict",
+        )
+        return response
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -170,17 +189,25 @@ def reset_password_with_reset_token(
 
 @router.post('/users/auth/reset_token_with_accept_token')
 def reset_password_with_accept_token(
-    form_data = AcceptTokenPasswordRequest,
-    user=Depends(get_current_user)
+    form_data: ResetPasswordWithAcceptToken,
+    user: User = Depends(get_current_user_for_reset_password)
 ):
-    try:
-        password = Hash.make(form_data.new_password)
+    try:   
+        password = Hash.make(form_data.password)
         user.password = password
         db.commit()
-        return JSONResponse(
+        access_token = Auth.create_access_token(data={'sub': user.email})
+        response = JSONResponse(
             status_code=status.HTTP_200_OK,
-            content="password had success change"
+            content={
+                'detail': 'password had success change',
+                'data': {
+                    'access_token': access_token
+                }
+            },
+            headers={'WWW-Authenticate': 'Bearer'},
         )
+        return response
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

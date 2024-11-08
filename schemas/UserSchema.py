@@ -29,10 +29,10 @@ class loginFormSchema(BaseModel):
 class forgotFormSchema(BaseModel):
     email:EmailStr
 
-class AcceptTokenPasswordRequest(BaseModel):
-    accept_token: str
-    new_password: str
-
 class ResetPasswordRequest(BaseModel):
     reset_token: str
     new_password: str
+    for_sure: bool
+
+class ResetPasswordWithAcceptToken(BaseModel):
+    password: str
